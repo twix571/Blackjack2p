@@ -1,5 +1,5 @@
 const CACHE_NAME = 'blackjack-v1';
-const ASSETS = ['/blackjack/', '/blackjack/index.html', '/blackjack/manifest.json'];
+const ASSETS = ['/Blackjack2p/', '/Blackjack2p/index.html', '/Blackjack2p/manifest.json'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS)));

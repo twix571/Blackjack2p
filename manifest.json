@@ -1,8 +1,8 @@
 {
   "name": "BlackJack",
   "short_name": "BlackJack",
-  "start_url": "/blackjack/",
-  "scope": "/blackjack/",
+  "start_url": "/Blackjack2p/",
+  "scope": "/Blackjack2p/",
   "display": "standalone",
   "background_color": "#000000",
   "theme_color": "#000000",
