@@ -16,12 +16,14 @@
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
     <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
     <style>
-        body { font-family: sans-serif; background: #000000; color: white; text-align: center; margin: 0; padding: 20px; padding-top: env(safe-area-inset-top); overflow: hidden; transition: box-shadow 0.2s ease-in-out; box-shadow: inset 0 0 0 0 transparent; min-height: 100vh; box-sizing: border-box; touch-action: manipulation; position: fixed; top: 0; left: 0; width: 100%; z-index: -1;}
+        body { font-family: sans-serif; background: #000000; color: white; text-align: center; margin: 0; padding: 20px; padding-top: env(safe-area-inset-top); overflow: hidden; transition: box-shadow 0.2s ease-in-out; box-shadow: inset 0 0 0 0 transparent; min-height: 100vh; box-sizing: border-box; touch-action: manipulation; position: fixed; top: 0; left: 0; width: 100%; z-index: -1; -webkit-user-select: none; user-select: none; }
         body.lose-flash { box-shadow: inset 0 0 0 20px red; }
         .container { max-width: 600px; margin: 0 auto; }
         .title-spacing { font-size: 2rem; font-weight: bold; margin-top: max(40px, calc(40px + env(safe-area-inset-top))); margin-bottom: 20px; }
         .hand { display: flex; justify-content: center; gap: 10px; margin: 20px 0; min-height: 120px; }
-        .score-display { font-size: 2rem; margin: 10px 0; }
+		.player-section { position: relative; display: flex; justify-content: center; align-items: center; min-height: 120px; }
+		.player-score-badge { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #000000; border: 2px solid #ffffff; border-radius: 4px; padding: 2px 12px; font-size: 1.8rem; font-weight: bold; color: white; z-index: 20; }
+		.player-section .hand { position: relative; z-index: 1; }
         .card { background: transparent; width: 80px; height: 120px; perspective: 1000px; }
         .card-inner { position: relative; width: 100%; height: 100%; text-align: center; transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1); transform-style: preserve-3d; }
         .card.flipped .card-inner { transform: rotateY(180deg); }
@@ -82,23 +84,36 @@
         .opponent-cards .card-front div:nth-child(2) { font-size: 1rem; }
         .turn-indicator { font-size: 0.85rem; color: #ffb300; margin-top: 5px; }
         .waiting-message { font-size: 1rem; color: #888; margin: 10px 0; }
+        .dealer-section { position: relative; display: flex; justify-content: center; align-items: center; min-height: 120px; }
+        .dealer-score-badge { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #000000; border: 2px solid #ffffff; border-radius: 4px; padding: 2px 12px; font-size: 1.8rem; font-weight: bold; color: white; z-index: 20; }
+        .dealer-section .hand { position: relative; z-index: 1; }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="title-spacing"></div>
-        <div id="opponent-area" class="opponent-area" style="display:none;">
-            <div class="opponent-title">Opponent's Hand (Balance: $<span id="opp-balance-val">1000</span> | Bet: $<span id="opp-bet-val">0</span>)</div>
-            <div id="opponent-cards" class="opponent-cards"></div>
-            <div id="turn-indicator" class="turn-indicator"></div>
+        <div>
+            <div class="dealer-section">
+                <div class="dealer-score-badge"><span id="dealer-score">0</span></div>
+                <div class="dealer-cards-wrapper">
+                    <div id="dealer-cards" class="hand"></div>
+                </div>
+            </div>
         </div>
         <div>
-            <div id="dealer-cards" class="hand"></div>
-            <div class="score-display"><span id="dealer-score">0</span></div>
-        </div>
-        <div>
-            <div class="score-display"><span id="player-score">0</span></div>
-            <div id="player-cards" class="hand"></div>
+            <div style="display: flex; justify-content: center; gap: 40px; width: 100%;">
+                <div class="player-section">
+                    <div class="player-score-badge"><span id="player-score">0</span></div>
+                    <div id="player-cards" class="hand"></div>
+                </div>
+                <div id="opponent-area" class="player-section" style="display:none;">
+                    <div class="player-score-badge"><span id="opponent-score">-</span></div>
+                    <div id="opponent-cards" class="hand"></div>
+                    <span id="opp-balance-val" style="display:none;"></span>
+                    <span id="opp-bet-val" style="display:none;"></span>
+                    <div id="turn-indicator" style="display:none;"></div>
+                </div>
+            </div>
         </div>
         <div id="message"></div>
         <div id="waiting-message" class="waiting-message"></div>
@@ -126,6 +141,7 @@
             <button id="deal-btn">Deal</button>
         </div>
     </div>
+    <button id="settings-btn" style="position: fixed; bottom: 20px; right: 20px; background: transparent; color: white; width: 50px; height: 50px; font-size: 1.5rem; cursor: pointer; z-index: 100; box-shadow: 0 2px 10px rgba(0,0,0,0.3);">⚙️</button>
     <div id="settings-overlay">
         <h2>Settings</h2>
         <div>
@@ -141,739 +157,613 @@
         <button id="settings-dismiss-btn">Dismiss</button>
     </div>
 
-		<script>
-			const DOM = {
-				pCards: document.getElementById('player-cards'),
-				dCards: document.getElementById('dealer-cards'),
-				pScore: document.getElementById('player-score'),
-				dScore: document.getElementById('dealer-score'),
-				message: document.getElementById('message'),
-				hitBtn: document.getElementById('hit-btn'),
-				standBtn: document.getElementById('stand-btn'),
-				dealBtn: document.getElementById('deal-btn'),
-				balanceAmount: document.getElementById('balance-amount'),
-				balancePopup: document.getElementById('balance-popup'),
-				betAmount: document.getElementById('bet-amount'),
-				resetBetBtn: document.getElementById('reset-bet-btn'),
-				chips: document.querySelectorAll('.chip'),
-				body: document.body,
-				timerVal: document.getElementById('timer-val'),
-				overlay: document.getElementById('settings-overlay'),
-				dismissBtn: document.getElementById('settings-dismiss-btn'),
-				hostBtn: document.getElementById('host-btn'),
-				hostIdDisplay: document.getElementById('host-id-display'),
-				peerIdInput: document.getElementById('peer-id-input'),
-				connectBtn: document.getElementById('connect-btn'),
-				connStatus: document.getElementById('connection-status'),
-				opponentArea: document.getElementById('opponent-area'),
-				opponentCards: document.getElementById('opponent-cards'),
-				turnIndicator: document.getElementById('turn-indicator'),
-				waitingMessage: document.getElementById('waiting-message'),
-				oppBetVal: document.getElementById('opp-bet-val'),
-				oppBalanceVal: document.getElementById('opp-balance-val')
-			};
+    <script>
+        const DOM = {
+            pCards: document.getElementById('player-cards'),
+            dCards: document.getElementById('dealer-cards'),
+            pScore: document.getElementById('player-score'),
+            dScore: document.getElementById('dealer-score'),
+            message: document.getElementById('message'),
+            hitBtn: document.getElementById('hit-btn'),
+            standBtn: document.getElementById('stand-btn'),
+            dealBtn: document.getElementById('deal-btn'),
+            balanceAmount: document.getElementById('balance-amount'),
+            balancePopup: document.getElementById('balance-popup'),
+            betAmount: document.getElementById('bet-amount'),
+            resetBetBtn: document.getElementById('reset-bet-btn'),
+            chips: document.querySelectorAll('.chip'),
+            body: document.body,
+            timerVal: document.getElementById('timer-val'),
+            overlay: document.getElementById('settings-overlay'),
+            dismissBtn: document.getElementById('settings-dismiss-btn'),
+            hostBtn: document.getElementById('host-btn'),
+            hostIdDisplay: document.getElementById('host-id-display'),
+            peerIdInput: document.getElementById('peer-id-input'),
+            connectBtn: document.getElementById('connect-btn'),
+            connStatus: document.getElementById('connection-status'),
+            opponentArea: document.getElementById('opponent-area'),
+            opponentCards: document.getElementById('opponent-cards'),
+			oppScore: document.getElementById('opponent-score'),
+            turnIndicator: document.getElementById('turn-indicator'),
+            waitingMessage: document.getElementById('waiting-message'),
+            oppBetVal: document.getElementById('opp-bet-val'),
+            oppBalanceVal: document.getElementById('opp-balance-val'),
+            settingsBtn: document.getElementById('settings-btn')
+        };
 
-			const SUITS = ['♠', '♥', '♦', '♣'];
-			const VALUES = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
-			const TURN_ORDER = [1, 2];
-			
-			let deck = [], playerHand = [], dealerHand = [], opponentHand = [];
-			let gameState = 'BETTING';
-			let balance = 1000, lastBalance = 1000, currentBet = 100, opponentBet = 0, opponentBalance = 1000;
-			let countdownInterval = null;
-			let timeLeft = 10;
-			let holdTimer;
-			let isMyTurn = false;
-			let playerNumber = null; 
-			let currentTurn = 1;     
-			let peer = null, conn = null;
-			let amReady = false, oppReady = false;
+        const SUITS = ['♠', '♥', '♦', '♣'];
+        const VALUES = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
+        
+        let deck = [], playerHand = [], dealerHand = [], opponentHand = [];
+        let gameState = 'BETTING';
+        let balance = 1000, lastBalance = 1000, currentBet = 100, opponentBet = 0, opponentBalance = 1000;
+        let countdownInterval = null, timeLeft = 10, isMyTurn = false, playerNumber = null, currentTurn = 1;     
+        let peer = null, conn = null, amReady = false, oppReady = false;
 
-			DOM.hitBtn.addEventListener('click', () => { console.log('Hit button clicked'); resetTimer(); hit(); });
-			DOM.standBtn.addEventListener('click', () => { console.log('Stand button clicked'); stand(); });
-			DOM.dealBtn.addEventListener('click', setReady);
-			DOM.resetBetBtn.addEventListener('click', () => { currentBet = 0; syncBet(); updateUI(); });
-			DOM.dismissBtn.addEventListener('click', () => DOM.overlay.style.display = 'none');
-			DOM.hostBtn.addEventListener('click', () => initPeer(true));
-			DOM.connectBtn.addEventListener('click', () => initPeer(false));
+        DOM.hitBtn.addEventListener('click', () => { resetTimer(); hit(); });
+        DOM.standBtn.addEventListener('click', stand);
+        DOM.dealBtn.addEventListener('click', setReady);
+        DOM.resetBetBtn.addEventListener('click', () => { currentBet = 0; syncBet(); updateUI(); });
+		DOM.dismissBtn.addEventListener('click', () => DOM.overlay.style.display = 'none');
+        DOM.hostBtn.addEventListener('click', () => initPeer(true));
+        DOM.connectBtn.addEventListener('click', () => initPeer(false));
+        DOM.settingsBtn.addEventListener('click', () => DOM.overlay.style.display = 'block');
 
-			DOM.chips.forEach(chip => {
-				chip.addEventListener('click', (e) => {
-					const value = parseInt(e.currentTarget.dataset.value, 10);
-					if (currentBet + value <= balance) { 
-						currentBet += value; 
-						syncBet();
-						updateUI(); 
-					}
-				});
+        DOM.chips.forEach(chip => {
+            chip.addEventListener('click', (e) => {
+                const value = parseInt(e.currentTarget.dataset.value, 10);
+                if (currentBet + value <= balance) { 
+                    currentBet += value; 
+                    syncBet();
+                    updateUI(); 
+                }
+            });
+        });
+
+        window.addEventListener('turnTimeout', () => {
+            (conn?.open && playerNumber === 2) ? clientStandOrBust(false) : stand();
+        });
+
+        function syncBet() {
+            if (conn?.open) sendToPeer({ type: 'BET_SYNC', bet: currentBet, balance });
+        }
+
+        function copyToClipboard(text) {
+			navigator.clipboard.writeText(text).then(() => {
+				const originalText = DOM.connStatus.innerText;
+				DOM.connStatus.innerText = "ID copied!";
+				setTimeout(() => DOM.connStatus.innerText = originalText, 2000);
 			});
+		}
 
-			window.addEventListener('turnTimeout', () => {
-				if (conn && conn.open && playerNumber === 2) {
-					clientStandOrBust(false);
-				} else {
-					stand(); 
-				}
-			});
-
-			function syncBet() {
-				if (conn && conn.open) {
-					sendToPeer({ type: 'BET_SYNC', bet: currentBet, balance: balance });
-				}
-			}
-
-			function initPeer(isHost) {
-				cleanupPeer();
-				DOM.connStatus.innerText = "Initializing connection...";
-				peer = new Peer();
-				
-				if (isHost) {
-					peer.on('open', (id) => {
-						DOM.hostIdDisplay.innerText = `Your ID: ${id}`;
-						DOM.connStatus.innerText = "Waiting for peer...";
-						playerNumber = 1;
-					});
-					peer.on('connection', (connection) => {
-						conn = connection;
-						setupConnectionHandlers();
-						playerNumber = 1;
-						sendToPeer({ type: 'PLAYER_NUMBER', number: 2 });
-						DOM.opponentArea.style.display = 'block';
-						syncBet();
-					});
-				} else {
-					const targetId = DOM.peerIdInput.value.trim();
-					if (!targetId) { DOM.connStatus.innerText = "Enter valid ID."; return; }
-					peer.on('open', () => {
-						conn = peer.connect(targetId);
-						setupConnectionHandlers();
-						playerNumber = 2;
-						DOM.opponentArea.style.display = 'block';
-						syncBet();
-					});
-				}
-				
-				peer.on('error', (err) => {
-					DOM.connStatus.innerText = `Error: ${err.type}`;
-					cleanupPeer();
+        function initPeer(isHost) {
+            cleanupPeer();
+            DOM.connStatus.innerText = "Initializing connection...";
+            peer = new Peer();
+            
+            if (isHost) {
+                peer.on('open', (id) => {
+					DOM.hostIdDisplay.innerHTML = `Your ID: <span id="peer-id-val" style="cursor:pointer; color:#4caf50; font-weight:bold;">${id}</span> (click to copy)`;
+					document.getElementById('peer-id-val').onclick = () => copyToClipboard(id);
+					DOM.connStatus.innerText = "Waiting for peer...";
+					playerNumber = 1;
 				});
-			}
+                peer.on('connection', (connection) => {
+                    conn = connection;
+                    setupConnectionHandlers();
+                    playerNumber = 1;
+                    sendToPeer({ type: 'PLAYER_NUMBER', number: 2 });
+                    DOM.opponentArea.style.display = 'block';
+                    syncBet();
+                });
+            } else {
+                const targetId = DOM.peerIdInput.value.trim();
+                if (!targetId) { DOM.connStatus.innerText = "Enter valid ID."; return; }
+                peer.on('open', () => {
+                    conn = peer.connect(targetId);
+                    setupConnectionHandlers();
+                    playerNumber = 2;
+                    DOM.opponentArea.style.display = 'block';
+                    syncBet();
+                });
+            }
+            
+            peer.on('error', (err) => {
+                DOM.connStatus.innerText = `Error: ${err.type}`;
+                cleanupPeer();
+            });
+        }
 
-			function cleanupPeer() {
-				stopTimer();
-				if (conn) {
-					conn.removeAllListeners();
-					if (conn.open) conn.close();
-					conn = null;
-				}
-				if (peer) {
-					peer.removeAllListeners();
-					if (!peer.destroyed) peer.destroy();
-					peer = null;
-				}
-				playerNumber = null;
-				amReady = false;
-				oppReady = false;
-				DOM.opponentArea.style.display = 'none';
-			}
+        function cleanupPeer() {
+            stopTimer();
+            if (conn) {
+                conn.removeAllListeners();
+                if (conn.open) conn.close();
+                conn = null;
+            }
+            if (peer) {
+                peer.removeAllListeners();
+                if (!peer.destroyed) peer.destroy();
+                peer = null;
+            }
+            playerNumber = null;
+            amReady = oppReady = false;
+            DOM.opponentArea.style.display = 'none';
+        }
 
-			function sendToPeer(data) {
-				if (conn && conn.open) conn.send(data);
-			}
+        function sendToPeer(data) {
+            if (conn?.open) conn.send(data);
+        }
 
-			function setupConnectionHandlers() {
-				conn.on('open', () => {
-					console.log('Connection opened:', playerNumber);
-					DOM.connStatus.innerText = "Connected!";
-					syncBet();
-				});
-				conn.on('data', (data) => {
-					console.log('Data received:', data);
-					handlePeerData(data);
-				});
-				conn.on('close', () => {
-					console.log('Connection closed');
-					DOM.connStatus.innerText = "Disconnected.";
-					cleanupPeer();
-				});
-				conn.on('error', (err) => {
-					console.log('Connection error:', err);
-					cleanupPeer();
-				});
-			}
+        function setupConnectionHandlers() {
+            conn.on('open', () => {
+                DOM.connStatus.innerText = "Connected!";
+                syncBet();
+            });
+            conn.on('data', handlePeerData);
+            conn.on('close', () => {
+                DOM.connStatus.innerText = "Disconnected.";
+                cleanupPeer();
+            });
+            conn.on('error', cleanupPeer);
+        }
 
-			function advanceTurn() {
-				console.log('advanceTurn() called:', { playerNumber, currentTurn, connOpen: conn && conn.open });
-				if (playerNumber !== 1) return;
+        function advanceTurn() {
+            if (playerNumber !== 1) return;
+            if (currentTurn === 1) {
+                currentTurn = 2;
+                if (conn?.open) {
+                    isMyTurn = false;
+                    sendToPeer({ type: 'TURN_SWITCH' });
+                    updateTurnDisplay();
+                    updateUI();
+                    resetTimer();
+                    return;
+                }
+            }
+            currentTurn = 3;
+            isMyTurn = false;
+            stopTimer();
+            setTimeout(hostResolveDealer, 0);
+        }
 
-				if (currentTurn === 1) {
-					console.log('Switching to turn 2');
-					currentTurn = 2;
-					if (conn && conn.open) {
-						isMyTurn = false;
-						sendToPeer({ type: 'TURN_SWITCH' });
-						updateTurnDisplay();
-						updateUI();
-						resetTimer();
-						console.log('Turn switch sent');
-						return; // Exit safely
-					}
-				}
+        function handlePeerData(data) {
+            switch(data.type) {
+                case 'PLAYER_NUMBER':
+                    playerNumber = data.number;
+                    break;
+                case 'BET_SYNC':
+                    opponentBet = data.bet;
+                    DOM.oppBetVal.innerText = opponentBet;
+                    if (data.balance !== undefined) {
+                        opponentBalance = data.balance;
+                        DOM.oppBalanceVal.innerText = opponentBalance;
+                    }
+                    break;
+                case 'READY_STATUS':
+                    oppReady = data.ready;
+                    opponentBet = data.bet;
+                    DOM.oppBetVal.innerText = opponentBet;
+                    if (data.balance !== undefined) {
+                        opponentBalance = data.balance;
+                        DOM.oppBalanceVal.innerText = opponentBalance;
+                    }
+                    if (oppReady) DOM.waitingMessage.innerText = "Opponent ready.";
+                    if (playerNumber === 1 && amReady && oppReady) hostStartGame();
+                    break;
+                case 'GAME_START':
+                    gameState = 'PLAYER_TURN';
+                    currentTurn = 1;
+                    balance -= currentBet;
+                    dealerHand = data.dealerHand;
+                    playerHand = data.p2Hand;
+                    opponentHand = data.p1Hand;
+                    isMyTurn = (currentTurn === playerNumber);
+                    DOM.waitingMessage.innerText = "";
+                    updateUI();
+                    updateTurnDisplay();
+                    resetTimer();
+                    syncBet();
+                    checkInitialNaturalBlackjacks();
+                    break;
+                case 'CARD_DRAWN': 
+                    playerHand.push(data.card);
+                    updateUI();
+                    sendToPeer({ type: 'OPPONENT_UPDATE', hand: playerHand });
+                    if (calculateScore(playerHand) > 21) clientStandOrBust(true);
+                    else resetTimer();
+                    break;
+                case 'OPPONENT_UPDATE':
+                    opponentHand = data.hand;
+                    syncHandUI(DOM.opponentCards, opponentHand, () => false);
+                    break;
+                case 'REQUEST_HIT':
+                    if (playerNumber === 1 && currentTurn === 2) {
+                        const card = getCard();
+                        sendToPeer({ type: 'CARD_DRAWN', card: card });
+                        opponentHand.push(card);
+                        syncHandUI(DOM.opponentCards, opponentHand, () => false);
+                        if (calculateScore(opponentHand) > 21) advanceTurn();
+                    }
+                    break;
+                case 'REQUEST_STAND': 
+                    if (playerNumber === 1 && currentTurn === 2) advanceTurn();
+                    break;
+                case 'TURN_SWITCH':
+                    currentTurn = 2;
+                    isMyTurn = (playerNumber === 2);
+                    updateTurnDisplay();
+                    updateUI(); 
+                    resetTimer();
+                    break;
+                case 'GAME_END': 
+                    gameState = 'BETTING';
+                    stopTimer();
+                    isMyTurn = amReady = oppReady = false;
+                    dealerHand = data.dealerHand;
+                    
+                    if (data.winP2) {
+                        balance += data.msgP2.includes("Blackjack!") ? Math.floor(currentBet * 2.5) : currentBet * 2;
+                        confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
+                    } else if (data.msgP2.includes("Push")) {
+                        balance += currentBet;
+                    } else {
+                        DOM.body.classList.add('lose-flash');           
+                        setTimeout(() => DOM.body.classList.remove('lose-flash'), 1000); 
+                    }
+                    
+                    updateUI();
+                    DOM.message.innerText = data.msgP2;
+                    if (data.msgP2.includes("Blackjack!")) DOM.message.classList.add('green-text');
+                    DOM.waitingMessage.innerText = "";
+                    checkBankruptcy();
+                    syncBet();
+                    break;
+            }
+        }
 
-				console.log('Host resolving dealer turn');
-				// If P2 turn is done, or P2 is not connected, resolve the game
-				currentTurn = 3;
-				isMyTurn = false;
-				stopTimer();
-				setTimeout(() => hostResolveDealer(), 0);
-			}
+        function setReady() {
+            if (currentBet <= 0 || currentBet > balance) { DOM.message.innerText = "Set valid bet."; return; }
+            if (conn?.open) {
+                amReady = true;
+                DOM.dealBtn.disabled = true;
+                DOM.waitingMessage.innerText = "Waiting for opponent...";
+                sendToPeer({ type: 'READY_STATUS', ready: true, bet: currentBet, balance: balance });
+                if (playerNumber === 1 && oppReady) hostStartGame();
+            } else {
+                startSoloGame();
+            }
+        }
 
-			function handlePeerData(data) {
-				switch(data.type) {
-					case 'PLAYER_NUMBER':
-						playerNumber = data.number;
-						break;
-					case 'BET_SYNC':
-						opponentBet = data.bet;
-						DOM.oppBetVal.innerText = opponentBet;
-						if (data.balance !== undefined) {
-							opponentBalance = data.balance;
-							DOM.oppBalanceVal.innerText = opponentBalance;
-						}
-						break;
-					case 'READY_STATUS':
-						oppReady = data.ready;
-						opponentBet = data.bet;
-						DOM.oppBetVal.innerText = opponentBet;
-						if (data.balance !== undefined) {
-							opponentBalance = data.balance;
-							DOM.oppBalanceVal.innerText = opponentBalance;
-						}
-						if (oppReady) DOM.waitingMessage.innerText = "Opponent ready.";
-						if (playerNumber === 1 && amReady && oppReady) {
-							hostStartGame();
-						}
-						break;
-					case 'GAME_START':
-						gameState = 'PLAYER_TURN';
-						currentTurn = 1;
-						// Deduct the current bet from the client's balance so UI states match the host
-						balance -= currentBet;
-						dealerHand = data.dealerHand;
-						playerHand = data.p2Hand;
-						opponentHand = data.p1Hand;
-						isMyTurn = (currentTurn === playerNumber);
-						DOM.waitingMessage.innerText = "";
-						updateUI();
-						updateTurnDisplay();
-						resetTimer();
-						syncBet();
-						checkInitialNaturalBlackjacks();
-						break;
-					case 'CARD_DRAWN': 
-						playerHand.push(data.card);
-						updateUI();
-						sendToPeer({ type: 'OPPONENT_UPDATE', hand: playerHand });
-						if (calculateScore(playerHand) > 21) {
-							clientStandOrBust(true);
-						} else {
-							resetTimer(); // Fixes client-side timer refresh on successful hit
-						}
-						break;
-					case 'OPPONENT_UPDATE':
-						opponentHand = data.hand;
-						renderOpponentCards();
-						break;
-					case 'REQUEST_HIT':
-						console.log('HEADPEER: Received REQUEST_HIT:', { playerNumber, currentTurn });
-						if (playerNumber === 1 && currentTurn === 2) {
-							console.log('HEADPEER: Processing opponent hit');
-							const card = getCard();
-							console.log('HEADPEER: Card drawn:', card);
-							sendToPeer({ type: 'CARD_DRAWN', card: card });
-							opponentHand.push(card);
-							renderOpponentCards();
-							const opponentScore = calculateScore(opponentHand);
-							console.log('HEADPEER: Opponent score:', opponentScore);
-							if (opponentScore > 21) {
-								console.log('HEADPEER: Opponent busts, advancing turn');
-								advanceTurn();
-							} else {
-								console.log('HEADPEER: Opponent hit OK');
-							}
-						} else {
-							console.log('HEADPEER: Request HIT ignored:', { playerNumber, currentTurn });
-						}
-						break;
-					case 'REQUEST_STAND': 
-						if (playerNumber === 1 && currentTurn === 2) {
-							advanceTurn();
-						}
-						break;
-					case 'TURN_SWITCH':
-						currentTurn = 2;
-						isMyTurn = (playerNumber === 2);
-						updateTurnDisplay();
-						updateUI(); // Explicitly redraw layout & button disabled/enabled states
-						resetTimer();
-						break;
-					case 'GAME_END': 
-						gameState = 'BETTING';
-						stopTimer();
-						isMyTurn = false;
-						amReady = false;
-						oppReady = false;
-						dealerHand = data.dealerHand;
-						
-						if (data.winP2) {
-							if (data.msgP2.includes("Blackjack!")) balance += Math.floor(currentBet * 2.5);
-							else balance += currentBet * 2;
-							confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
-						} else if (data.msgP2.includes("Push")) {
-							balance += currentBet;
-						} else {
-							DOM.body.classList.add('lose-flash');           
-							setTimeout(() => DOM.body.classList.remove('lose-flash'), 1000); 
-						}
-						
-						updateUI();
-						DOM.message.innerText = data.msgP2;
-						if (data.msgP2.includes("Blackjack!")) DOM.message.classList.add('green-text');
-						DOM.waitingMessage.innerText = "";
-						checkBankruptcy();
-						syncBet();
-						break;
-				}
-			}
+        function hostStartGame() {
+            balance -= currentBet;
+            resetDeck();
+            
+            playerHand = [getCard(), getCard()];
+            opponentHand = [getCard(), getCard()];
+            dealerHand = [getCard(), getCard()];
+            
+            gameState = 'PLAYER_TURN';
+            currentTurn = 1;
+            isMyTurn = true;
+            
+            sendToPeer({
+                type: 'GAME_START',
+                p1Hand: playerHand,
+                p2Hand: opponentHand,
+                dealerHand: dealerHand
+            });
+            
+            DOM.waitingMessage.innerText = "";
+            updateUI();
+            updateTurnDisplay();
+            resetTimer();
+            syncBet();
+            checkInitialNaturalBlackjacks();
+        }
 
-			function setReady() {
-				if (currentBet <= 0 || currentBet > balance) { DOM.message.innerText = "Set valid bet."; return; }
-				if (conn && conn.open) {
-					amReady = true;
-					DOM.dealBtn.disabled = true;
-					DOM.waitingMessage.innerText = "Waiting for opponent...";
-					sendToPeer({ type: 'READY_STATUS', ready: true, bet: currentBet, balance: balance });
-					if (playerNumber === 1 && oppReady) {
-						hostStartGame();
-					}
-				} else {
-					startSoloGame();
-				}
-			}
+        function startSoloGame() {
+            balance -= currentBet;
+            DOM.message.innerText = '';
+            DOM.message.classList.remove('green-text');
+            resetDeck();
+            
+            playerHand = [getCard(), getCard()];
+            dealerHand = [getCard(), getCard()];
+            
+            gameState = 'PLAYER_TURN';
+            isMyTurn = true;
+            updateUI();
+            resetTimer();
+            
+            if (calculateScore(playerHand) === 21 || calculateScore(dealerHand) === 21) {
+                soloResolveEnd();
+            }
+        }
 
-			function hostStartGame() {
-				balance -= currentBet;
-				resetDeck();
-				
-				const p1Hand = [getCard(), getCard()];
-				const p2Hand = [getCard(), getCard()];
-				const dHand = [getCard(), getCard()];
-				
-				dealerHand = dHand;
-				playerHand = p1Hand;
-				opponentHand = p2Hand;
-				
-				gameState = 'PLAYER_TURN';
-				currentTurn = 1;
-				isMyTurn = true;
-				
-				sendToPeer({
-					type: 'GAME_START',
-					p1Hand: p1Hand,
-					p2Hand: p2Hand,
-					dealerHand: dHand
-				});
-				
-				DOM.waitingMessage.innerText = "";
-				updateUI();
-				updateTurnDisplay();
-				resetTimer();
-				syncBet();
-				checkInitialNaturalBlackjacks();
-			}
+        function checkInitialNaturalBlackjacks() {
+            if (calculateScore(dealerHand) === 21) {
+                currentTurn = 3;
+                setTimeout(hostResolveDealer, 0);
+            }
+        }
 
-			function startSoloGame() {
-				balance -= currentBet;
-				DOM.pCards.innerHTML = DOM.dCards.innerHTML = DOM.message.innerText = '';
-				DOM.message.classList.remove('green-text');
-				resetDeck();
-				
-				playerHand = [getCard(), getCard()];
-				dealerHand = [getCard(), getCard()];
-				
-				gameState = 'PLAYER_TURN';
-				isMyTurn = true;
-				updateUI();
-				resetTimer();
-				
-				const pScore = calculateScore(playerHand);
-				const dScore = calculateScore(dealerHand);
-				if (pScore === 21 || dScore === 21) {
-					soloResolveEnd();
-				}
-			}
+        function updateTurnDisplay() {
+            DOM.turnIndicator.innerText = conn?.open ? ((currentTurn === playerNumber) ? "Your turn" : "Opponent's turn") : "";
+        }
 
-			function checkInitialNaturalBlackjacks() {
-				const p1Score = calculateScore(playerHand);
-				const p2Score = calculateScore(opponentHand);
-				const dScore = calculateScore(dealerHand);
-				
-				// Only auto-resolve if dealer has natural; otherwise allow turns
-				if (dScore === 21) {
-					currentTurn = 3;
-					setTimeout(() => hostResolveDealer(), 0);
-				}
-			}
+        function resetTimer() {
+            clearInterval(countdownInterval);
+            if (gameState === 'PLAYER_TURN' && isMyTurn) {
+                timeLeft = 10;
+                DOM.timerVal.innerText = timeLeft;
+                countdownInterval = setInterval(() => {
+                    timeLeft--;
+                    DOM.timerVal.innerText = timeLeft;
+                    if (timeLeft <= 0) { 
+                        clearInterval(countdownInterval); 
+                        window.dispatchEvent(new CustomEvent('turnTimeout'));
+                    }
+                }, 1000);
+            }
+        }
 
-			function renderOpponentCards() {
-				syncHandUI(DOM.opponentCards, opponentHand, () => false);
-			}
+        function stopTimer() {
+            clearInterval(countdownInterval);
+            DOM.timerVal.innerText = "10";
+        }
 
-			function updateTurnDisplay() {
-				if (conn && conn.open) {
-					DOM.turnIndicator.innerText = (currentTurn === playerNumber) ? "Your turn" : "Opponent's turn";
-				} else {
-					DOM.turnIndicator.innerText = "";
-				}
-			}
+        function resetDeck() {
+            deck = SUITS.flatMap(suit => VALUES.map(value => ({ suit, value })));
+            for (let i = deck.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [deck[i], deck[j]] = [deck[j], deck[i]];
+            }
+        }
 
-			function resetTimer() {
-				clearInterval(countdownInterval);
-				if (gameState === 'PLAYER_TURN' && isMyTurn) {
-					timeLeft = 10;
-					DOM.timerVal.innerText = timeLeft;
-					countdownInterval = setInterval(() => {
-						timeLeft--;
-						DOM.timerVal.innerText = timeLeft;
-						if (timeLeft <= 0) { 
-							clearInterval(countdownInterval); 
-							window.dispatchEvent(new CustomEvent('turnTimeout'));
-						}
-					}, 1000);
-				}
-			}
+        function calculateScore(hand) {
+            let score = hand.reduce((sum, card) => sum + (['J', 'Q', 'K'].includes(card.value) ? 10 : card.value === 'A' ? 11 : parseInt(card.value, 10)), 0);
+            let aces = hand.filter(card => card.value === 'A').length;
+            while (score > 21 && aces > 0) { score -= 10; aces--; }
+            return score;
+        }
 
-			function stopTimer() {
-				clearInterval(countdownInterval);
-				DOM.timerVal.innerText = "10";
-			}
+        function createCardUI(card, hidden = false) {
+            const cardDiv = document.createElement('div');
+            cardDiv.className = 'card';
+            cardDiv.dataset.suit = card.suit;
+            cardDiv.dataset.value = card.value;
+            cardDiv.dataset.hidden = String(hidden);
 
-			function resetDeck() {
-				deck = SUITS.flatMap(suit => VALUES.map(value => ({ suit, value })));
-				for (let i = deck.length - 1; i > 0; i--) {
-					const j = Math.floor(Math.random() * (i + 1));
-					[deck[i], deck[j]] = [deck[j], deck[i]];
-				}
-			}
+            const isRed = card.suit === '♥' || card.suit === '♦';
+            cardDiv.innerHTML = `
+                <div class="card-inner">
+                    <div class="card-back"></div>
+                    <div class="card-front ${isRed ? 'red' : ''}">
+                        <div style="align-self: flex-start; line-height: 1;">${card.value}</div>
+                        <div style="align-self: center; font-size: 2rem;">${card.suit}</div>
+                        <div style="align-self: flex-end; line-height: 1; transform: rotate(180deg);">${card.value}</div>
+                    </div>
+                </div>`;
+            if (!hidden) setTimeout(() => cardDiv.classList.add('flipped'), 50);
+            return cardDiv;
+        }
+        
+        function syncHandUI(container, handArray, shouldBeHiddenFn) {
+            while (container.children.length > handArray.length) {
+                container.removeChild(container.lastChild);
+            }
+            handArray.forEach((card, i) => {
+                const isHidden = shouldBeHiddenFn ? shouldBeHiddenFn(card, i) : false;
+                if (i < container.children.length) {
+                    const existingCard = container.children[i];
+                    if (existingCard.dataset.suit !== card.suit || existingCard.dataset.value !== card.value || existingCard.dataset.hidden !== String(isHidden)) {
+                        container.replaceChild(createCardUI(card, isHidden), existingCard);
+                    }
+                } else {
+                    container.appendChild(createCardUI(card, isHidden));
+                }
+            });
+        }
 
-			function calculateScore(hand) {
-				let score = hand.reduce((sum, card) => sum + (['J', 'Q', 'K'].includes(card.value) ? 10 : card.value === 'A' ? 11 : parseInt(card.value, 10)), 0);
-				let aces = hand.filter(card => card.value === 'A').length;
-				while (score > 21 && aces > 0) { score -= 10; aces--; }
-				return score;
-			}
+        function showPlaceholderCards() {
+            DOM.dCards.innerHTML = DOM.pCards.innerHTML = '';
+            for (let i = 0; i < 2; i++) {
+                const dCard = document.createElement('div');
+                dCard.className = 'card';
+                dCard.innerHTML = '<div class="card-inner"><div class="card-back"></div></div>';
+                DOM.dCards.appendChild(dCard);
+                DOM.pCards.appendChild(dCard.cloneNode(true));
+            }
+        }
 
-			function createCardUI(card, hidden = false, animate = false) {
-				const cardDiv = document.createElement('div');
-				cardDiv.className = `card${animate ? ' slide-in' : ''}`;
-				
-				// Add data attributes to track state
-				cardDiv.dataset.suit = card.suit;
-				cardDiv.dataset.value = card.value;
-				cardDiv.dataset.hidden = hidden ? 'true' : 'false';
+        function triggerBalanceAnimation(diff) {
+            DOM.balanceAmount.classList.remove('bump');
+            DOM.balancePopup.classList.remove('animate-up', 'animate-down');
+            void DOM.balanceAmount.offsetWidth; 
+            DOM.balanceAmount.classList.add('bump');
+            
+            DOM.balancePopup.innerText = `${diff > 0 ? '+' : '-'}$${Math.abs(diff)}`;
+            DOM.balancePopup.style.color = diff > 0 ? '#4caf50' : '#f44336';
+            DOM.balancePopup.classList.add(diff > 0 ? 'animate-up' : 'animate-down');
+        }
 
-				const isRed = card.suit === '♥' || card.suit === '♦';
-				cardDiv.innerHTML = `
-					<div class="card-inner">
-						<div class="card-back"></div>
-						<div class="card-front ${isRed ? 'red' : ''}">
-							<div style="align-self: flex-start; line-height: 1;">${card.value}</div>
-							<div style="align-self: center; font-size: 2rem;">${card.suit}</div>
-							<div style="align-self: flex-end; line-height: 1; transform: rotate(180deg);">${card.value}</div>
-						</div>
-					</div>`;
-				if (!hidden) setTimeout(() => cardDiv.classList.add('flipped'), 50);
-				return cardDiv;
-			}
+        function updateUI() {
+            syncHandUI(DOM.pCards, playerHand, () => false);
+			syncHandUI(DOM.opponentCards, opponentHand, () => false);
+            syncHandUI(DOM.dCards, dealerHand, (card, i) => gameState === 'PLAYER_TURN' && i === 1);
+
+            const pScore = calculateScore(playerHand);
+            DOM.pScore.innerText = pScore;
+            DOM.pScore.classList.toggle('red', pScore > 21);
+            DOM.pScore.classList.toggle('green-text', pScore === 21);
+
+            const dScore = (gameState !== 'PLAYER_TURN') ? calculateScore(dealerHand) : calculateScore([dealerHand[0]]);
+            DOM.dScore.innerText = dScore;
+            DOM.dScore.classList.toggle('red', dScore > 21);
+
+            DOM.balanceAmount.innerText = `$${balance}`;
+            if (balance !== lastBalance) { triggerBalanceAnimation(balance - lastBalance); lastBalance = balance; }
+            DOM.betAmount.innerText = currentBet;
+            
+            const isTurn = gameState === 'PLAYER_TURN' && isMyTurn;
+            DOM.hitBtn.disabled = DOM.standBtn.disabled = !isTurn;
+            DOM.dealBtn.disabled = DOM.resetBetBtn.disabled = (gameState !== 'BETTING' || amReady);
+            DOM.chips.forEach(chip => chip.disabled = (gameState !== 'BETTING' || amReady));
 			
-			function syncHandUI(container, handArray, shouldBeHiddenFn) {
-				// 1. Remove excess cards left over from a previous round
-				while (container.children.length > handArray.length) {
-					container.removeChild(container.lastChild);
-				}
-				
-				// 2. Update existing cards or append new ones
-				handArray.forEach((card, i) => {
-					const isHidden = shouldBeHiddenFn ? shouldBeHiddenFn(card, i) : false;
-					
-					if (i < container.children.length) {
-						const existingCard = container.children[i];
-						
-						// Only replace the card if its identity or visibility state changed
-						if (existingCard.dataset.suit !== card.suit || 
-							existingCard.dataset.value !== card.value || 
-							existingCard.dataset.hidden !== String(isHidden)) {
-							
-							const newCard = createCardUI(card, isHidden, false);
-							container.replaceChild(newCard, existingCard);
-						}
-					} else {
-						// Append a brand new card since this spot doesn't exist yet
-						container.appendChild(createCardUI(card, isHidden, false));
-					}
-				});
-			}
+			DOM.oppScore.innerText = (gameState === 'PLAYER_TURN' || gameState === 'DEALER_TURN') ? calculateScore(opponentHand) : '-';
+        }
 
-			function createPlaceholder() {
-				const card = document.createElement('div');
-				card.className = 'card';
-				card.innerHTML = '<div class="card-inner"><div class="card-back"></div></div>';
-				return card;
-			}
+        function getCard() {
+            if (!deck.length) resetDeck();
+            return deck.pop();
+        }
 
-			function showPlaceholderCards() {
-				DOM.dCards.innerHTML = DOM.pCards.innerHTML = '';
-				for (let i = 0; i < 2; i++) {
-					DOM.dCards.appendChild(createPlaceholder());
-					DOM.pCards.appendChild(createPlaceholder());
-				}
-			}
+        function hit() {
+            if (gameState !== 'PLAYER_TURN' || !isMyTurn) return;
 
-			function triggerBalanceAnimation(diff) {
-				DOM.balanceAmount.classList.remove('bump');
-				DOM.balancePopup.classList.remove('animate-up', 'animate-down');
-				void DOM.balanceAmount.offsetWidth; 
-				DOM.balanceAmount.classList.add('bump');
-				
-				DOM.balancePopup.innerText = `${diff > 0 ? '+' : '-'}$${Math.abs(diff)}`;
-				DOM.balancePopup.style.color = diff > 0 ? '#4caf50' : '#f44336';
-				DOM.balancePopup.classList.add(diff > 0 ? 'animate-up' : 'animate-down');
-			}
+            if (conn?.open) {
+                if (playerNumber === 1) {
+                    playerHand.push(getCard());
+                    updateUI();
+                    sendToPeer({ type: 'OPPONENT_UPDATE', hand: playerHand });
+                    if (calculateScore(playerHand) > 21) advanceTurn();
+                    else resetTimer();
+                } else {
+                    sendToPeer({ type: 'REQUEST_HIT' });
+                }
+            } else {
+                playerHand.push(getCard());
+                updateUI();
+                if (calculateScore(playerHand) > 21) soloResolveEnd();
+            }
+        }
 
-			function updateUI() {
-				// Use the sync helper instead of innerHTML = '' loops
-				syncHandUI(DOM.pCards, playerHand, () => false);
-				syncHandUI(DOM.dCards, dealerHand, (card, i) => gameState === 'PLAYER_TURN' && i === 1);
+        function stand() { 
+            if (gameState !== 'PLAYER_TURN' || !isMyTurn) return; 
+            stopTimer();
+            if (conn?.open) {
+                if (playerNumber === 1) advanceTurn();
+                else clientStandOrBust(false);
+            } else {
+                gameState = 'DEALER_TURN';
+                updateUI();
+                setTimeout(playSoloDealerHand, 800);
+            }
+        }
 
-				if (conn && conn.open) {
-					renderOpponentCards();
-				}
+        function clientStandOrBust(isBust) {
+            stopTimer();
+            isMyTurn = false;
+            updateTurnDisplay();
+            if (playerNumber === 2) {
+                sendToPeer({ type: isBust ? 'OPPONENT_UPDATE' : 'REQUEST_STAND', hand: playerHand });
+                if (isBust) sendToPeer({ type: 'REQUEST_STAND' });
+            }
+        }
 
-				const pScore = calculateScore(playerHand);
-				DOM.pScore.innerText = pScore;
-				DOM.pScore.classList.toggle('red', pScore > 21);
-				DOM.pScore.classList.toggle('green-text', pScore === 21);
+        function getOutcomeMessage(pScore, dScore, hand) {
+            if (pScore > 21) return "Bust! You lose.";
+            if (dScore > 21) return "Dealer busts! You win!";
+            if (pScore > dScore) return "You win!";
+            if (pScore < dScore) return "Dealer wins.";
+            if (pScore === 21 && hand.length === 2 && dScore !== 21) return "Blackjack! You win!";
+            return "Push (Tie).";
+        }
 
-				const dScore = (gameState !== 'PLAYER_TURN') ? calculateScore(dealerHand) : calculateScore([dealerHand[0]]);
-				DOM.dScore.innerText = dScore;
-				DOM.dScore.classList.toggle('red', dScore > 21);
+        function hostResolveDealer() {
+            gameState = 'DEALER_TURN';
+            updateUI();
+            
+            while (calculateScore(dealerHand) < 17) dealerHand.push(getCard());
+            
+            const dScore = calculateScore(dealerHand);
+            const p1Score = calculateScore(playerHand);
+            const p2Score = calculateScore(opponentHand);
+            
+            const msgP1 = getOutcomeMessage(p1Score, dScore, playerHand);
+            const msgP2 = getOutcomeMessage(p2Score, dScore, opponentHand);
+            
+			const winP1 = msgP1.includes("You win!");
+			const winP2 = msgP2.includes("You win!");	
+            
+            if (msgP1.includes("Blackjack!")) balance += Math.floor(currentBet * 2.5);
+            else if (winP1) balance += currentBet * 2;
+            else if (msgP1.includes("Push")) balance += currentBet;
 
-				DOM.balanceAmount.innerText = `$${balance}`;
-				if (balance !== lastBalance) { triggerBalanceAnimation(balance - lastBalance); lastBalance = balance; }
-				DOM.betAmount.innerText = currentBet;
-				
-				const isTurn = gameState === 'PLAYER_TURN' && isMyTurn;
-				DOM.hitBtn.disabled = DOM.standBtn.disabled = !isTurn;
-				DOM.dealBtn.disabled = (gameState !== 'BETTING' || amReady);
-				DOM.resetBetBtn.disabled = (gameState !== 'BETTING' || amReady);
-				DOM.chips.forEach(chip => chip.disabled = (gameState !== 'BETTING' || amReady));
-			}
+            sendToPeer({
+                type: 'GAME_END',
+                dealerHand,
+                msgP1,
+                msgP2,
+                winP1,
+                winP2
+            });
 
-			function getCard() {
-				if (!deck.length) resetDeck();
-				return deck.pop();
-			}
+            gameState = 'BETTING';
+            amReady = oppReady = isMyTurn = false;
+            
+            if (winP1) confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
+            if (p1Score > 21 || (dScore <= 21 && dScore > p1Score)) {
+                DOM.body.classList.add('lose-flash');           
+                setTimeout(() => DOM.body.classList.remove('lose-flash'), 1000); 
+            }
+            
+            updateUI();
+            DOM.message.innerText = msgP1;
+            if (msgP1.includes("Blackjack!")) DOM.message.classList.add('green-text');
+            DOM.waitingMessage.innerText = "";
+            checkBankruptcy();
+            syncBet();
+        }
 
-			function hit() {
-				console.log('hit() called:', { gameState, isMyTurn, playerNumber, currentTurn });
-				if (gameState !== 'PLAYER_TURN' || !isMyTurn) return;
+        function playSoloDealerHand() {
+            if (calculateScore(dealerHand) < 17) { 
+                dealerHand.push(getCard()); 
+                updateUI(); 
+                setTimeout(playSoloDealerHand, 800); 
+            } else {
+                soloResolveEnd();
+            }
+        }
 
-				if (conn && conn.open) {
-					if (playerNumber === 1) {
-						console.log('Host hitting');
-						playerHand.push(getCard());
-						if (calculateScore(playerHand) > 21) {
-							console.log('Host busting');
-							updateUI();
-							sendToPeer({ type: 'OPPONENT_UPDATE', hand: playerHand });
-							advanceTurn();
-						} else {
-							console.log('Host continuing');
-							isMyTurn = true;
-							updateUI();
-							sendToPeer({ type: 'OPPONENT_UPDATE', hand: playerHand });
-							resetTimer();
-						}
-					} else {
-						console.log('Client requesting hit');
-						sendToPeer({ type: 'REQUEST_HIT' });
-					}
-				} else {
-					console.log('Solo hit');
-					playerHand.push(getCard());
-					updateUI();
-					if (calculateScore(playerHand) > 21) soloResolveEnd();
-				}
-			}
-			function stand() { 
-				if (gameState !== 'PLAYER_TURN' || !isMyTurn) return; 
-				stopTimer();
-				
-				if (conn && conn.open) {
-					if (playerNumber === 1) {
-						advanceTurn();
-					} else {
-						// Tell the host that the client is standing
-						clientStandOrBust(false);
-					}
-				} else {
-					gameState = 'DEALER_TURN';
-					updateUI();
-					setTimeout(playSoloDealerHand, 800);
-				}
-			}
+        function soloResolveEnd() {
+            gameState = 'BETTING';
+            stopTimer();
+            isMyTurn = false;
+            
+            const pScore = calculateScore(playerHand);
+            const dScore = calculateScore(dealerHand);
+            const msg = getOutcomeMessage(pScore, dScore, playerHand);
+            const isWin = msg.includes("win");
+            
+            if (msg.includes("Blackjack!")) balance += Math.floor(currentBet * 2.5);
+            else if (isWin) balance += currentBet * 2;
+            else if (msg.includes("Push")) balance += currentBet;
+            
+            if (msg.includes("Blackjack!")) DOM.message.classList.add('green-text');
+            if (isWin) confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
+            if (pScore > 21 || (dScore <= 21 && dScore > pScore)) { 
+                DOM.body.classList.add('lose-flash');           
+                setTimeout(() => DOM.body.classList.remove('lose-flash'), 1000); 
+            }
+            
+            updateUI(); 
+            DOM.message.innerText = msg;
+            checkBankruptcy();
+        }
 
-			function clientStandOrBust(isBust) {
-				stopTimer();
-				isMyTurn = false;
-				updateTurnDisplay();
-				if (playerNumber === 2) {
-					sendToPeer({ type: isBust ? 'OPPONENT_UPDATE' : 'REQUEST_STAND', hand: playerHand });
-					if (isBust) {
-						sendToPeer({ type: 'REQUEST_STAND' });
-					}
-				}
-			}
+        function checkBankruptcy() {
+            if (balance <= 0) { 
+                DOM.message.innerText += " Out of money! Resetting to $1000."; 
+                balance = 1000; 
+                currentBet = 100; 
+                syncBet();
+                updateUI();  
+            }
+        }
 
-			function hostResolveDealer() {
-				gameState = 'DEALER_TURN';
-				updateUI();
-				
-				while (calculateScore(dealerHand) < 17) {
-					dealerHand.push(getCard());
-				}
-				
-				const dScore = calculateScore(dealerHand);
-				const p1Score = calculateScore(playerHand);
-				const p2Score = calculateScore(opponentHand);
-				
-				let msgP1 = "", msgP2 = "";
-				let winP1 = false, winP2 = false;
-				
-				if (p1Score > 21) { msgP1 = "Bust! You lose."; winP1 = false; }
-				else if (dScore > 21) { msgP1 = "Dealer busts! You win!"; winP1 = true; }
-				else if (p1Score > dScore) { msgP1 = "You win!"; winP1 = true; }
-				else if (p1Score < dScore) { msgP1 = "Dealer wins."; winP1 = false; }
-				else { msgP1 = "Push (Tie)."; }
-				if (p1Score === 21 && playerHand.length === 2 && dScore !== 21) msgP1 = "Blackjack! You win!";
-
-				if (p2Score > 21) { msgP2 = "Bust! You lose."; winP2 = false; }
-				else if (dScore > 21) { msgP2 = "Dealer busts! You win!"; winP2 = true; }
-				else if (p2Score > dScore) { msgP2 = "You win!"; winP2 = true; }
-				else if (p2Score < dScore) { msgP2 = "Dealer wins."; winP2 = false; }
-				else { msgP2 = "Push (Tie)."; }
-				if (p2Score === 21 && opponentHand.length === 2 && dScore !== 21) msgP2 = "Blackjack! You win!";
-
-				if (msgP1.includes("Blackjack!") && winP1) balance += Math.floor(currentBet * 2.5);
-				else if (winP1) balance += currentBet * 2;
-				else if (msgP1.includes("Push")) balance += currentBet;
-
-				sendToPeer({
-					type: 'GAME_END',
-					dealerHand: dealerHand,
-					msgP1: msgP1,
-					msgP2: msgP2,
-					winP1: winP1,
-					winP2: winP2
-				});
-
-				gameState = 'BETTING';
-				amReady = false;
-				oppReady = false;
-				isMyTurn = false;
-				
-				if (winP1) confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
-				if (p1Score > 21 || (dScore <= 21 && dScore > p1Score)) {
-					DOM.body.classList.add('lose-flash');           
-					setTimeout(() => DOM.body.classList.remove('lose-flash'), 1000); 
-				}
-				
-				updateUI();
-				DOM.message.innerText = msgP1;
-				if (msgP1.includes("Blackjack!")) DOM.message.classList.add('green-text');
-				DOM.waitingMessage.innerText = "";
-				checkBankruptcy();
-				syncBet();
-			}
-
-			function playSoloDealerHand() {
-				if (calculateScore(dealerHand) < 17) { 
-					dealerHand.push(getCard()); 
-					updateUI(); 
-					setTimeout(playSoloDealerHand, 800); 
-				} else {
-					soloResolveEnd();
-				}
-			}
-
-			function soloResolveEnd() {
-				gameState = 'BETTING';
-				stopTimer();
-				isMyTurn = false;
-				
-				const pScore = calculateScore(playerHand);
-				const dScore = calculateScore(dealerHand);
-				let msg = "";
-				let isWin = false;
-				let isLose = false;
-
-				if (pScore > 21) { msg = "Bust! You lose."; isLose = true; }
-				else if (dScore > 21) { msg = "Dealer busts! You win!"; isWin = true; }
-				else if (pScore > dScore) { msg = "You win!"; isWin = true; }
-				else if (pScore < dScore) { msg = "Dealer wins."; isLose = true; }
-				else { msg = "Push (Tie)."; }
-				
-				if (pScore === 21 && playerHand.length === 2 && dScore !== 21) {
-					msg = "Blackjack! You win!";
-					isWin = true;
-				}
-
-				if (msg.includes("Blackjack!") && isWin) balance += Math.floor(currentBet * 2.5);
-				else if (isWin) balance += currentBet * 2;
-				else if (msg.includes("Push")) balance += currentBet;
-				
-				if (msg.includes("Blackjack!")) DOM.message.classList.add('green-text');
-				if (isWin) confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
-				if (isLose) { 
-					DOM.body.classList.add('lose-flash');           
-					setTimeout(() => DOM.body.classList.remove('lose-flash'), 1000); 
-				}
-				
-				updateUI(); 
-				DOM.message.innerText = msg;
-				checkBankruptcy();
-			}
-
-			function checkBankruptcy() {
-				if (balance <= 0) { 
-					DOM.message.innerText += " Out of money! Resetting to $1000."; 
-					balance = 1000; 
-					currentBet = 100; 
-					syncBet();
-					updateUI();  
-				}
-			}
-
-			const toggleHold = (start) => {
-					console.log('Toggle hold:', start);
-					start ? holdTimer = setTimeout(() => DOM.overlay.style.display = 'block', 500) : clearTimeout(holdTimer);
-				};
-			DOM.body.addEventListener('mousedown', () => toggleHold(true));
-			DOM.body.addEventListener('mouseup', () => toggleHold(false));
-			DOM.body.addEventListener('touchstart', () => toggleHold(true));
-			DOM.body.addEventListener('touchend', () => toggleHold(false));
-
-			showPlaceholderCards();
-		</script>
+        showPlaceholderCards();
+    </script>
 </body>
 </html>
